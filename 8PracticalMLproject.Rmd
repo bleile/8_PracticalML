@@ -74,7 +74,7 @@ RFconfusionMatrix <-confusionMatrix(as.factor(testData$classe),as.factor(RFtrain
 RFconfusionMatrix$overall[1]
 ```
 
-```{r GBMtrain, echo=FALSE}
+```{r GBMtrain}
 GBMcontrol <- trainControl(method="repeatedcv", number=3, repeats = 2, verbose = FALSE)
 GBMmodel <- train(classe~., data=trainData, method="gbm", trControl=GBMcontrol, verbose = FALSE)
 # use trained GBM on testData to evaluate accuracy
