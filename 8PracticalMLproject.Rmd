@@ -1,0 +1,91 @@
+---
+title: "8_Practical_Machine_Learning_project"
+author: "Bleile"
+date: "7/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+
+This project will demonstrate methods for Machine Learning (ML) using R to select the best performing model from three methods: Classification Tree, Random Forest and GBM.  The models will be trained on a large dataset made available by ref a).  Those two datasets provided are pml-training.csv of 19622 observations 160 factors and pml-testing.csv of 20 observations and the same 160 factors. The second dataset being only 20 observations is not large enough to act as a useful testing set, instead will be used as a validation set.  The training dataset will be split 70/30 to create the training and test datasets.
+
+ref a): Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human ’13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+```{r initialize, echo=FALSE}
+#setup
+#Load packages
+pacman::p_load(pacman, dplyr, GGally, ggplot2, ggthemes, ggvis, lubridate, plotly, rio, markdown, shiny, tidyverse,
+               caret, rpart, rpart.plot,randomForest, corrplot, e1071, gbm)
+
+#Load datasets
+TrainingData <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"),header=TRUE)
+ValData <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"),header=TRUE)
+
+#Look at the dataset
+str(TrainingData)
+```
+## Dataset Feature Discussion
+
+The Training and Validation datasets both have 160 factors.  The first seven factors are identifiers which won't be used for creating the model.  There are several factors that contain mostly NA or null values which are useless in training a model, so those will be excluded.  Excluding factors with less than than 5% data (>95% NA or null) reduces the number of factors by 100 greatly reducing the size of the datasets and simplifies the number of factors to just those with meaningful data upon which to train. The factors eliminated from the training dataset will also be eliminated from the validation training set. Once the factor reduction is accomplish, the training dataset will be split 70/30 into a training dataset and a testing dataset leaving us with three datasets: trainData, testData and ValData for training, testing and validation.
+
+```{r reduce and split}
+#Kill factors with more than 5% NA or null
+idxKillCol <- which(colSums(is.na(TrainingData) |TrainingData=="")>0.95*dim(TrainingData)[1]) 
+TrainingData <- TrainingData[,-idxKillCol] #remove factors with >95% null or NA
+TrainingData <- TrainingData[,-c(1:7)] #remove ID and time series factors (1:7) as they don't pertain to model training
+
+#Remove same factors from ValData, the validation dataset
+ValData <- ValData[,-idxKillCol]
+ValData <- ValData[,-c(1:7)]
+
+#Split TrainingData into trainData and testData
+set.seed(1)
+inTrainData <- createDataPartition(TrainingData$classe, p=0.70, list=FALSE)
+trainData <- TrainingData[inTrainData,]
+testData <- TrainingData[-inTrainData,]
+```
+## Train the models
+
+Three models will be trained and the one with highest accuracy assessed against the testData will be used on the ValData for the final answer.
+
+```{r CTtrain}
+CTcontrol <- trainControl(method="cv", number=5)
+CTmodel <- train(classe~., data=trainData, method="rpart", trControl=CTcontrol)
+# use trained CT on testData to evaluate accuracy
+CTtrainpredict <- predict(CTmodel, newdata=testData)
+CTconfusionMatrix <-confusionMatrix(as.factor(testData$classe),as.factor(CTtrainpredict))
+CTconfusionMatrix$overall[1]
+```
+
+```{r RFtrain}
+RFcontrol <- trainControl(method="cv", number=3,  verbose=FALSE)
+RFmodel <- train(classe~., data=trainData, method="rf", trControl=RFcontrol)
+# use trained RF on testData to evaluate accuracy
+RFtrainpredict <- predict(RFmodel, newdata=testData)
+RFconfusionMatrix <-confusionMatrix(as.factor(testData$classe),as.factor(RFtrainpredict))
+RFconfusionMatrix$overall[1]
+```
+
+```{r GBMtrain, echo=FALSE}
+GBMcontrol <- trainControl(method="repeatedcv", number=3, repeats = 2, verbose = FALSE)
+GBMmodel <- train(classe~., data=trainData, method="gbm", trControl=GBMcontrol, verbose = FALSE)
+# use trained GBM on testData to evaluate accuracy
+GBMtrainpredict <- predict(GBMmodel, newdata=testData)
+GBMconfusionMatrix <-confusionMatrix(as.factor(testData$classe),as.factor(GBMtrainpredict))
+GBMconfusionMatrix$overall[1]
+```
+## Conclusion
+Random Forest finishes best with 99.2% accuracy, GBM next with 95.9% accuracy and CTT last with 48.8% accuracy. Therefore, for the final result the trained Random Forest model is applied to the Validation Dataset with the following result:
+```{r Final Validation using RF Model}
+ValPredict <- predict(RFmodel, newdata=ValData)
+ValPredict
+```
+
